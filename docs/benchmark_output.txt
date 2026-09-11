@@ -1,0 +1,70 @@
+PostgreSQL reachable at 127.0.0.1:5432, database reconcilegate: publishing/quarantining live.
+
+=== 20 clean loads ===
+load clean-00: PUBLISHED (0 failing checks)
+load clean-01: PUBLISHED (0 failing checks)
+load clean-02: PUBLISHED (0 failing checks)
+load clean-03: PUBLISHED (0 failing checks)
+load clean-04: PUBLISHED (0 failing checks)
+load clean-05: PUBLISHED (0 failing checks)
+load clean-06: PUBLISHED (0 failing checks)
+load clean-07: PUBLISHED (0 failing checks)
+load clean-08: PUBLISHED (0 failing checks)
+load clean-09: PUBLISHED (0 failing checks)
+load clean-10: PUBLISHED (0 failing checks)
+load clean-11: PUBLISHED (0 failing checks)
+load clean-12: PUBLISHED (0 failing checks)
+load clean-13: PUBLISHED (0 failing checks)
+load clean-14: PUBLISHED (0 failing checks)
+load clean-15: PUBLISHED (0 failing checks)
+load clean-16: PUBLISHED (0 failing checks)
+load clean-17: PUBLISHED (0 failing checks)
+load clean-18: PUBLISHED (0 failing checks)
+load clean-19: PUBLISHED (0 failing checks)
+
+clean loads held: 0 of 20
+
+=== 30 seeded-defect loads ===
+load defect-missing_required_tab-00 (expected missing_required_tab:returns_register:IT): CAUGHT, published=False, failing_checks=['missing_required_tab:returns_register:IT']
+load defect-missing_required_tab-01 (expected missing_required_tab:downtime_log:NL): CAUGHT, published=False, failing_checks=['missing_required_tab:downtime_log:NL']
+load defect-missing_required_tab-02 (expected missing_required_tab:shipment_log:NL): CAUGHT, published=False, failing_checks=['missing_required_tab:shipment_log:NL']
+load defect-merged_header_misaligned-03 (expected merged_header_misaligned:shipment_log:IT): CAUGHT, published=False, failing_checks=["merged_header_misaligned:shipment_log:IT: expected ['Order ID', 'Plant', 'Month', 'Shipment: Quantity', 'Shipment: Unit'], got ['Order ID', 'Plant', 'Month', 'Shipment: Unit', 'Shipment: Quantity']"]
+load defect-merged_header_misaligned-04 (expected merged_header_misaligned:downtime_log:NL): CAUGHT, published=False, failing_checks=["merged_header_misaligned:downtime_log:NL: expected ['Event ID', 'Plant', 'Month', 'Downtime: Duration', 'Downtime: Unit'], got ['Event ID', 'Plant', 'Month', 'Downtime: Unit', 'Downtime: Duration']"]
+load defect-merged_header_misaligned-05 (expected merged_header_misaligned:returns_register:SG): CAUGHT, published=False, failing_checks=["merged_header_misaligned:returns_register:SG: expected ['Return ID', 'Plant', 'Month', 'Return: Volume', 'Return: Unit'], got ['Return ID', 'Plant', 'Month', 'Return: Unit', 'Return: Volume']"]
+load defect-unexpected_unit_value-06 (expected unexpected_unit_value:returns_register:SG): CAUGHT, published=False, failing_checks=["unexpected_unit_value:returns_register:SG row 8: unit='grams' not in ['L', 'mL']"]
+load defect-unexpected_unit_value-07 (expected unexpected_unit_value:returns_register:SG): CAUGHT, published=False, failing_checks=["unexpected_unit_value:returns_register:SG row 2: unit='grams' not in ['L', 'mL']"]
+load defect-unexpected_unit_value-08 (expected unexpected_unit_value:returns_register:IT): CAUGHT, published=False, failing_checks=["unexpected_unit_value:returns_register:IT row 11: unit='grams' not in ['L', 'mL']"]
+load defect-unexpected_unit_value-09 (expected unexpected_unit_value:returns_register:NL): CAUGHT, published=False, failing_checks=["unexpected_unit_value:returns_register:NL row 11: unit='grams' not in ['L', 'mL']"]
+load defect-type_mismatch-10 (expected type_mismatch:returns_register:IT): CAUGHT, published=False, failing_checks=["type_mismatch:returns_register:IT row 12: Return: Volume='N/A' is not numeric"]
+load defect-type_mismatch-11 (expected type_mismatch:shipment_log:SG): CAUGHT, published=False, failing_checks=["type_mismatch:shipment_log:SG row 12: Shipment: Quantity='N/A' is not numeric"]
+load defect-type_mismatch-12 (expected type_mismatch:shipment_log:NL): CAUGHT, published=False, failing_checks=["type_mismatch:shipment_log:NL row 14: Shipment: Quantity='N/A' is not numeric"]
+load defect-type_mismatch-13 (expected type_mismatch:downtime_log:NL): CAUGHT, published=False, failing_checks=["type_mismatch:downtime_log:NL row 14: Downtime: Duration='N/A' is not numeric"]
+load defect-null_in_required_field-14 (expected null_in_required_field:shipment_log:NL): CAUGHT, published=False, failing_checks=['null_in_required_field:shipment_log:NL row 11: Plant is null']
+load defect-null_in_required_field-15 (expected null_in_required_field:shipment_log:SG): CAUGHT, published=False, failing_checks=['null_in_required_field:shipment_log:SG row 4: Plant is null']
+load defect-null_in_required_field-16 (expected null_in_required_field:shipment_log:NL): CAUGHT, published=False, failing_checks=['null_in_required_field:shipment_log:NL row 2: Plant is null']
+load defect-null_in_required_field-17 (expected null_in_required_field:shipment_log:IT): CAUGHT, published=False, failing_checks=['null_in_required_field:shipment_log:IT row 6: Plant is null']
+load defect-out_of_range_value-18 (expected out_of_range_value:downtime_log:IT): CAUGHT, published=False, failing_checks=['out_of_range_value:downtime_log:IT row 11: Downtime: Duration=-999.0 < 0']
+load defect-out_of_range_value-19 (expected out_of_range_value:returns_register:SG): CAUGHT, published=False, failing_checks=['out_of_range_value:returns_register:SG row 11: Return: Volume=-999.0 < 0']
+load defect-out_of_range_value-20 (expected out_of_range_value:returns_register:NL): CAUGHT, published=False, failing_checks=['out_of_range_value:returns_register:NL row 1: Return: Volume=-999.0 < 0']
+load defect-out_of_range_value-21 (expected out_of_range_value:downtime_log:NL): CAUGHT, published=False, failing_checks=['out_of_range_value:downtime_log:NL row 3: Downtime: Duration=-999.0 < 0']
+load defect-duplicate_natural_key-22 (expected duplicate_natural_key:returns_register:NL): CAUGHT, published=False, failing_checks=["duplicate_natural_key:returns_register:NL row 1: key ('RET-22-NL-001',) duplicated", "duplicate_natural_key:returns_register:NL row 15: key ('RET-22-NL-001',) duplicated"]
+load defect-duplicate_natural_key-23 (expected duplicate_natural_key:shipment_log:SG): CAUGHT, published=False, failing_checks=["duplicate_natural_key:shipment_log:SG row 1: key ('SHP-23-SG-001',) duplicated", "duplicate_natural_key:shipment_log:SG row 15: key ('SHP-23-SG-001',) duplicated"]
+load defect-duplicate_natural_key-24 (expected duplicate_natural_key:downtime_log:NL): CAUGHT, published=False, failing_checks=["duplicate_natural_key:downtime_log:NL row 1: key ('DWN-24-NL-001',) duplicated", "duplicate_natural_key:downtime_log:NL row 15: key ('DWN-24-NL-001',) duplicated"]
+load defect-duplicate_natural_key-25 (expected duplicate_natural_key:shipment_log:SG): CAUGHT, published=False, failing_checks=["duplicate_natural_key:shipment_log:SG row 1: key ('SHP-25-SG-001',) duplicated", "duplicate_natural_key:shipment_log:SG row 15: key ('SHP-25-SG-001',) duplicated"]
+load defect-reconciliation_mismatch-26 (expected reconciliation_mismatch:shipment_log:NL): CAUGHT, published=False, failing_checks=['reconciliation_mismatch:shipment_log:NL: excel_total=10008.344 sor_total=12510.430 pct_diff=20.000% (tolerance 1.0%)']
+load defect-reconciliation_mismatch-27 (expected reconciliation_mismatch:returns_register:SG): CAUGHT, published=False, failing_checks=['reconciliation_mismatch:returns_register:SG: excel_total=429.713 sor_total=537.142 pct_diff=20.000% (tolerance 1.0%)']
+load defect-reconciliation_mismatch-28 (expected reconciliation_mismatch:shipment_log:NL): CAUGHT, published=False, failing_checks=['reconciliation_mismatch:shipment_log:NL: excel_total=13797.427 sor_total=17246.782 pct_diff=20.000% (tolerance 1.0%)']
+load defect-reconciliation_mismatch-29 (expected reconciliation_mismatch:returns_register:NL): CAUGHT, published=False, failing_checks=['reconciliation_mismatch:returns_register:NL: excel_total=640.012 sor_total=800.016 pct_diff=20.000% (tolerance 1.0%)']
+
+seeded defects caught: 30 of 30
+by defect type:
+  missing_required_tab: 3 of 3
+  merged_header_misaligned: 3 of 3
+  unexpected_unit_value: 4 of 4
+  type_mismatch: 4 of 4
+  null_in_required_field: 4 of 4
+  out_of_range_value: 4 of 4
+  duplicate_natural_key: 4 of 4
+  reconciliation_mismatch: 4 of 4
+
+lakehouse writes (published loads only): 20 of 50 total loads

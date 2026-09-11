@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+venv/
+.venv/
+.venv-wsl/
+
+# Spark
+spark-warehouse/
+metastore_db/
+derby.log
+
+# Regenerable data: nothing under data/ is tracked. Rebuild the 20 clean
+# loads and 30 seeded-defect loads with `python scripts/run_gate_benchmark.py`.
+data/
+*.parquet
+
+# Small illustrative workbooks are committed on purpose under sample_data/
+# (see sample_data/README.md); everything else under data/ is not.
+
+# Editors
+.vscode/
+.idea/
