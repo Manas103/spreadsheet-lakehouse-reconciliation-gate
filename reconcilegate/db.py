@@ -33,6 +33,14 @@ CREATE TABLE IF NOT EXISTS quarantined_loads (
     failing_checks JSONB NOT NULL,
     quarantined_at TIMESTAMP NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS source_watermarks (
+    source_name TEXT PRIMARY KEY,
+    last_watermark DOUBLE PRECISION NOT NULL,
+    last_row_count INTEGER NOT NULL,
+    last_content_hash TEXT NOT NULL,
+    last_result TEXT NOT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT now()
+);
 """
 
 
@@ -77,5 +85,5 @@ def quarantine(conn, load_id: str, month: int, failing_checks: list) -> None:
 
 def reset(conn) -> None:
     with conn.cursor() as cur:
-        cur.execute("TRUNCATE published_loads, quarantined_loads")
+        cur.execute("TRUNCATE published_loads, quarantined_loads, source_watermarks")
     conn.commit()

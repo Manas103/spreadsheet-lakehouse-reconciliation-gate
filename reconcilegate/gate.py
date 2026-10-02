@@ -1,10 +1,12 @@
-"""The fail-closed gate: run every source's contract, then reconciliation
-for the two sources that have a system-of-record, and quarantine the
-whole load (do not publish anything) if any check anywhere failed. A
-load is all-or-nothing: this repo does not partially publish a load with
-one bad source and five good ones, because a partially-published load is
-exactly the silent-corruption failure mode a reconciliation gate exists
-to prevent.
+"""The fail-closed gate: run every source's contract (dispatched by the
+contract's own declared ``kind``, not a hardcoded source list, so adding
+a 10th source means adding a contract, not editing this file), then
+reconciliation for the two sources that have a system-of-record, and
+quarantine the whole load (do not publish anything) if any check anywhere
+failed. A load is all-or-nothing: this repo does not partially publish a
+load with one bad source and eight good ones, because a partially-
+published load is exactly the silent-corruption failure mode a
+reconciliation gate exists to prevent.
 """
 from __future__ import annotations
 
@@ -12,11 +14,10 @@ from dataclasses import dataclass, field
 
 from reconcilegate.config import RECONCILIATION_TARGETS
 from reconcilegate.contracts import CONTRACTS
+from reconcilegate.drifting_csv import validate_drifting_csv_source
+from reconcilegate.fixedwidth import validate_fixed_width_source
 from reconcilegate.reconcile import reconcile_source
 from reconcilegate.validate import FailingCheck, validate_excel_source, validate_flat_source
-
-EXCEL_SOURCES = ["shipment_log", "returns_register", "downtime_log", "complaint_tracker"]
-FLAT_SOURCES = ["erp_order_extract", "wms_shipment_extract"]
 
 
 @dataclass
@@ -30,13 +31,24 @@ class GateResult:
         return [str(c) for c in self.failing_checks]
 
 
+def _validate_one_source(name: str, sources: dict) -> list:
+    contract = CONTRACTS[name]
+    if contract.kind == "excel":
+        return validate_excel_source(sources[name], contract)
+    if contract.kind in ("csv", "rest_api"):
+        return validate_flat_source(sources[name], contract)
+    if contract.kind == "fixed_width":
+        return validate_fixed_width_source(sources[name], contract)
+    if contract.kind == "drifting_csv":
+        return validate_drifting_csv_source(sources[name], contract)
+    raise ValueError(f"{name}: unknown contract kind {contract.kind!r}")
+
+
 def run_gate(load_id: str, sources: dict) -> GateResult:
     failing: list[FailingCheck] = []
 
-    for source in EXCEL_SOURCES:
-        failing.extend(validate_excel_source(sources[source], CONTRACTS[source]))
-    for source in FLAT_SOURCES:
-        failing.extend(validate_flat_source(sources[source], CONTRACTS[source]))
+    for name in CONTRACTS:
+        failing.extend(_validate_one_source(name, sources))
 
     # Reconciliation only for a source whose own contract checks passed
     # (a header/type failure makes a computed total meaningless), and only

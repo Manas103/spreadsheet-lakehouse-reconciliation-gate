@@ -8,7 +8,21 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from reconcilegate.config import COUNTRIES, UNIT_CONVERSION
+from reconcilegate.config import (
+    COUNTRIES,
+    UNIT_CONVERSION,
+    VENDOR_CLAIM_AMOUNT_CENTS_RANGE,
+    VENDOR_CLAIM_STATUS_CODES,
+    VENDOR_CLAIMS_ROWS_PER_CYCLE,
+    VENDOR_CODES,
+    VENDOR_DIRECTORY_REGIONS,
+    VENDOR_DIRECTORY_ROWS_PER_CYCLE,
+    VENDOR_DIRECTORY_STATUS,
+    VENDOR_LABOR_CATEGORIES,
+    VENDOR_RATE_ROWS_PER_CYCLE,
+    VENDOR_RATE_USD_RANGE,
+)
+from reconcilegate.drifting_csv import BROKEN_VARIANT_HEADERS, VARIANT_HEADERS
 
 N_ROWS_PER_COUNTRY = 15
 
@@ -114,6 +128,46 @@ def generate_clean_batch(base_seed: int, month: int) -> dict:
             }
         )
 
+    rng = _rng(base_seed, month, "vendor-rate")
+    vendor_rate_catalog = [
+        {
+            "rate_id": f"RATE-{month:03d}-{i:03d}",
+            "vendor_code": str(rng.choice(VENDOR_CODES)),
+            "labor_category": str(rng.choice(VENDOR_LABOR_CATEGORIES)),
+            "hourly_rate_usd": round(float(rng.uniform(*VENDOR_RATE_USD_RANGE)), 2),
+            "cycle": month,
+            "updated_at": f"2026-{(month % 12) + 1:02d}-01T00:00:00",
+        }
+        for i in range(VENDOR_RATE_ROWS_PER_CYCLE)
+    ]
+
+    rng = _rng(base_seed, month, "vendor-claims")
+    vendor_claims_extract = [
+        {
+            "claim_ref": f"CLM-{month * 1000 + i:06d}",
+            "vendor_code": str(rng.choice(VENDOR_CODES)),
+            "plant": str(rng.choice(COUNTRIES)),
+            "amount_cents": int(rng.integers(*VENDOR_CLAIM_AMOUNT_CENTS_RANGE)),
+            "status_code": str(rng.choice(VENDOR_CLAIM_STATUS_CODES)),
+            "cycle": month,
+        }
+        for i in range(VENDOR_CLAIMS_ROWS_PER_CYCLE)
+    ]
+
+    rng = _rng(base_seed, month, "vendor-directory")
+    vendor_directory_rows = [
+        {
+            "vendor_id": f"VND-{i:04d}",
+            "vendor_name": f"Vendor {i:04d} LLC",
+            "tax_id": f"TAX{month:03d}{i:03d}",
+            "status": str(rng.choice(VENDOR_DIRECTORY_STATUS)),
+            "cycle": month,
+            "region": str(rng.choice(VENDOR_DIRECTORY_REGIONS)),
+        }
+        for i in range(VENDOR_DIRECTORY_ROWS_PER_CYCLE)
+    ]
+    variant_name = list(VARIANT_HEADERS.keys())[month % len(VARIANT_HEADERS)]
+
     return {
         "shipment_log": shipment_sheets,
         "returns_register": returns_sheets,
@@ -121,6 +175,9 @@ def generate_clean_batch(base_seed: int, month: int) -> dict:
         "complaint_tracker": complaint_sheets,
         "erp_order_extract": erp_extract,
         "wms_shipment_extract": wms_extract,
+        "vendor_rate_catalog": vendor_rate_catalog,
+        "vendor_claims_extract": vendor_claims_extract,
+        "vendor_directory_feed": {"rows": vendor_directory_rows, "header": VARIANT_HEADERS[variant_name]},
     }
 
 
@@ -234,8 +291,88 @@ DEFECT_INJECTORS = {
 }
 
 
-def generate_defect_batch(base_seed: int, month: int, defect_type: str) -> tuple[dict, str, str]:
+def generate_defect_batch(base_seed: int, month: int, defect_type: str, pool: str = "original") -> tuple[dict, str, str]:
+    """``pool="original"`` reproduces the exact 8-type/6-source RNG stream
+    and injectors this repo shipped with at 30/30. ``pool="vendor"`` is
+    the 10-extra-instance pool added to reach 40/40: the 2 defect types
+    native to the 3 new source formats, plus one more instance of an
+    existing type targeted specifically at a vendor source (see
+    config.DEFECT_COUNTS_VENDOR)."""
     clean = generate_clean_batch(base_seed, month)
-    rng = _rng(base_seed, month, f"defect-{defect_type}")
-    injector = DEFECT_INJECTORS[defect_type]
+    injectors = DEFECT_INJECTORS if pool == "original" else VENDOR_DEFECT_INJECTORS
+    salt = f"defect-{defect_type}" if pool == "original" else f"defect-vendor-{defect_type}"
+    rng = _rng(base_seed, month, salt)
+    injector = injectors[defect_type]
     return injector(clean, rng)
+
+
+# --- vendor-source defect injection (10 extra instances, 2 new types) -
+
+VENDOR_RATE_SOURCE = "vendor_rate_catalog"
+VENDOR_CLAIMS_SOURCE = "vendor_claims_extract"
+VENDOR_DIRECTORY_SOURCE = "vendor_directory_feed"
+FIXED_WIDTH_CORRUPT_FLAVORS = ["short", "shifted"]
+
+
+def inject_type_mismatch_vendor_rate(batch: dict, rng: np.random.Generator) -> tuple[dict, str, str]:
+    batch = dict(batch)
+    rows = [dict(r) for r in batch[VENDOR_RATE_SOURCE]]
+    idx = int(rng.integers(0, len(rows)))
+    rows[idx]["hourly_rate_usd"] = "N/A"
+    batch[VENDOR_RATE_SOURCE] = rows
+    return batch, VENDOR_RATE_SOURCE, f"type_mismatch:{VENDOR_RATE_SOURCE}:row{idx}"
+
+
+def inject_null_in_required_field_vendor_rate(batch: dict, rng: np.random.Generator) -> tuple[dict, str, str]:
+    batch = dict(batch)
+    rows = [dict(r) for r in batch[VENDOR_RATE_SOURCE]]
+    idx = int(rng.integers(0, len(rows)))
+    rows[idx]["vendor_code"] = None
+    batch[VENDOR_RATE_SOURCE] = rows
+    return batch, VENDOR_RATE_SOURCE, f"null_in_required_field:{VENDOR_RATE_SOURCE}:row{idx}"
+
+
+def inject_out_of_range_value_vendor_rate(batch: dict, rng: np.random.Generator) -> tuple[dict, str, str]:
+    batch = dict(batch)
+    rows = [dict(r) for r in batch[VENDOR_RATE_SOURCE]]
+    idx = int(rng.integers(0, len(rows)))
+    rows[idx]["hourly_rate_usd"] = -50.0
+    batch[VENDOR_RATE_SOURCE] = rows
+    return batch, VENDOR_RATE_SOURCE, f"out_of_range_value:{VENDOR_RATE_SOURCE}:row{idx}"
+
+
+def inject_duplicate_natural_key_vendor_claims(batch: dict, rng: np.random.Generator) -> tuple[dict, str, str]:
+    batch = dict(batch)
+    rows = [dict(r) for r in batch[VENDOR_CLAIMS_SOURCE]]
+    dup = dict(rows[0])
+    dup["claim_ref"] = rows[1]["claim_ref"]
+    rows.append(dup)
+    batch[VENDOR_CLAIMS_SOURCE] = rows
+    return batch, VENDOR_CLAIMS_SOURCE, f"duplicate_natural_key:{VENDOR_CLAIMS_SOURCE}"
+
+
+def inject_fixed_width_field_misaligned(batch: dict, rng: np.random.Generator) -> tuple[dict, str, str]:
+    rows = batch[VENDOR_CLAIMS_SOURCE]
+    idx = int(rng.integers(0, len(rows)))
+    flavor = str(rng.choice(FIXED_WIDTH_CORRUPT_FLAVORS))
+    batch = {**batch, "_fixed_width_corrupt": {idx: flavor}}
+    return batch, VENDOR_CLAIMS_SOURCE, f"fixed_width_field_misaligned:{VENDOR_CLAIMS_SOURCE}:row{idx}:{flavor}"
+
+
+def inject_csv_header_drift(batch: dict, rng: np.random.Generator) -> tuple[dict, str, str]:
+    variant = str(rng.choice(list(BROKEN_VARIANT_HEADERS.keys())))
+    batch = dict(batch)
+    directory = dict(batch[VENDOR_DIRECTORY_SOURCE])
+    directory["header"] = BROKEN_VARIANT_HEADERS[variant]
+    batch[VENDOR_DIRECTORY_SOURCE] = directory
+    return batch, VENDOR_DIRECTORY_SOURCE, f"csv_header_drift:{VENDOR_DIRECTORY_SOURCE}:{variant}"
+
+
+VENDOR_DEFECT_INJECTORS = {
+    "fixed_width_field_misaligned": inject_fixed_width_field_misaligned,
+    "csv_header_drift": inject_csv_header_drift,
+    "type_mismatch": inject_type_mismatch_vendor_rate,
+    "null_in_required_field": inject_null_in_required_field_vendor_rate,
+    "out_of_range_value": inject_out_of_range_value_vendor_rate,
+    "duplicate_natural_key": inject_duplicate_natural_key_vendor_claims,
+}

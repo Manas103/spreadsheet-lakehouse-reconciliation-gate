@@ -1,0 +1,31 @@
+# A vendor directory CSV whose header genuinely drifts between drops: a
+# column gets renamed to a declared alias, columns get reordered, and an
+# optional column is sometimes appended. Ingestion maps columns by
+# declared name (or alias), not by position, exactly because of this.
+# A required field whose name and every declared alias are both absent
+# from a drop's header is csv_header_drift, drift the contract does not
+# tolerate; renaming to a declared alias, reordering, or an absent/present
+# optional column are all tolerated and are not defects.
+source_name: vendor_directory_feed
+kind: drifting_csv
+owner: "Vendor Management (CSV drop)"
+watermark_column: cycle
+refresh_window_hours: 168
+late_arrival_window_hours: 72
+expected_countries: []
+unit_field: null
+natural_key: ["vendor_id"]
+expected_columns:
+  - "vendor_id"
+  - "vendor_name"
+  - "tax_id"
+  - "status"
+  - "cycle"
+  - "region"
+fields:
+  - {name: "vendor_id", dtype: str, nullable: false, required: true}
+  - {name: "vendor_name", dtype: str, nullable: false, required: true}
+  - {name: "tax_id", dtype: str, nullable: false, required: true, aliases: ["tin"]}
+  - {name: "status", dtype: str, nullable: false, required: true}
+  - {name: "cycle", dtype: int, nullable: false, required: true, min_value: 0, max_value: 239}
+  - {name: "region", dtype: str, nullable: true, required: false}

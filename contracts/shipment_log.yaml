@@ -1,0 +1,21 @@
+source_name: shipment_log
+kind: excel
+owner: "Plant Operations (manual Excel)"
+watermark_column: Month
+refresh_window_hours: 720
+late_arrival_window_hours: 168
+expected_countries: [IT, NL, SG]
+unit_field: "Shipment: Unit"
+natural_key: ["Order ID"]
+expected_columns:
+  - "Order ID"
+  - "Plant"
+  - "Month"
+  - "Shipment: Quantity"
+  - "Shipment: Unit"
+fields:
+  - {name: "Order ID", dtype: str, nullable: false}
+  - {name: "Plant", dtype: str, nullable: false}
+  - {name: "Month", dtype: int, nullable: false, min_value: 0, max_value: 239}
+  - {name: "Shipment: Quantity", dtype: float, nullable: false, min_value: 0, max_value: 100000}
+  - {name: "Shipment: Unit", dtype: str, nullable: false}

@@ -1,0 +1,33 @@
+# A vendor-hosted labor-rate catalog, pulled over a real local cursor-
+# paginated REST API (reconcilegate/apiserver.py serves it,
+# reconcilegate/restclient.py fetches it with real exponential backoff
+# honoring Retry-After on 429 responses). One page = one HTTP response;
+# the watermark is the load "cycle" the vendor tags each rate row with,
+# not the HTTP cursor (the cursor is a pagination mechanism, not an
+# incremental-load signal; the vendor re-serves its whole catalog, cursor
+# and all, on every pull).
+source_name: vendor_rate_catalog
+kind: rest_api
+owner: "Vendor Management (REST API)"
+watermark_column: cycle
+refresh_window_hours: 24
+late_arrival_window_hours: 12
+expected_countries: []
+unit_field: null
+natural_key: ["rate_id"]
+expected_columns:
+  - "rate_id"
+  - "vendor_code"
+  - "labor_category"
+  - "hourly_rate_usd"
+  - "cycle"
+  - "updated_at"
+fields:
+  - {name: "rate_id", dtype: str, nullable: false}
+  - {name: "vendor_code", dtype: str, nullable: false}
+  - {name: "labor_category", dtype: str, nullable: false}
+  - {name: "hourly_rate_usd", dtype: float, nullable: false, min_value: 0, max_value: 500}
+  - {name: "cycle", dtype: int, nullable: false, min_value: 0, max_value: 239}
+  - {name: "updated_at", dtype: str, nullable: false}
+api:
+  page_size: 10

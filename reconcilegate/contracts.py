@@ -1,13 +1,28 @@
-"""Declarative per-source contracts. Every rule ``validate.py`` enforces is
-data here, not a hardcoded `if` per source: column order and names, dtype,
-nullability, numeric range, unit whitelist and canonical unit, and (for the
-two sources with a system-of-record) the reconciliation target.
+"""Loads every source's contract from a real per-source YAML file under
+``contracts/`` into a ``SourceContract`` object. This used to be 6 Python
+module-level dataclass literals; the "a per-source YAML contract" claim
+this repo now makes is true for all 9 sources, not just the 3 added for
+it, so all 9 (including the original 6, unchanged in meaning) were moved
+to YAML in the same refactor. ``validate.py``, ``gate.py``, ``reconcile.py``
+still see the same ``SourceContract``/``FieldSpec`` objects as before;
+only where they come from changed.
+
+A field's shape for a non-fixed-width source is unaffected by the extra
+attributes (``start``, ``length``, ``pattern``, ``aliases``, ``required``)
+added for the 3 new source kinds; they default to ``None`` / ``[]`` / ``True``
+and are simply unused by the excel/csv validators.
 """
 from __future__ import annotations
 
+import glob
+import os
 from dataclasses import dataclass, field
 
+import yaml
+
 from reconcilegate.config import COUNTRIES, UNIT_CONVERSION
+
+CONTRACTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "contracts")
 
 
 @dataclass(frozen=True)
@@ -17,112 +32,136 @@ class FieldSpec:
     nullable: bool = False
     min_value: float | None = None
     max_value: float | None = None
+    # fixed_width only: this field's byte offset and length in the record.
+    start: int | None = None
+    length: int | None = None
+    # fixed_width only: a regex the sliced raw value must fullmatch; a
+    # mismatch here means the declared byte offsets no longer line up
+    # with this field's actual content (fixed_width_field_misaligned).
+    pattern: str | None = None
+    # drifting_csv only: alternate header names this field is recognized
+    # under across drops (e.g. "tax_id" drifting to "tin").
+    aliases: tuple = ()
+    # drifting_csv only: whether this column must appear (by name or
+    # alias) in every drop. False means "may be absent", not "may be null".
+    required: bool = True
 
 
 @dataclass(frozen=True)
 class SourceContract:
     source_name: str
-    is_excel: bool
-    expected_columns: list  # canonical order, the merged-header alignment check
+    kind: str  # "excel" | "csv" | "rest_api" | "fixed_width" | "drifting_csv"
+    expected_columns: list
     fields: list  # list[FieldSpec]
-    natural_key: list  # columns that together must be unique
+    natural_key: list
+    owner: str
+    watermark_column: str
+    refresh_window_hours: float
+    late_arrival_window_hours: float
     expected_countries: list = field(default_factory=lambda: list(COUNTRIES))
     unit_field: str | None = None
+    record_length: int | None = None  # fixed_width only
+    extra: dict = field(default_factory=dict)  # kind-specific config (e.g. api.page_size)
+
+    @property
+    def is_excel(self) -> bool:
+        return self.kind == "excel"
+
+    def field(self, name: str) -> FieldSpec:
+        for f in self.fields:
+            if f.name == name:
+                return f
+        raise KeyError(f"{self.source_name}: no field named {name!r}")
 
 
-SHIPMENT_LOG = SourceContract(
-    source_name="shipment_log",
-    is_excel=True,
-    expected_columns=["Order ID", "Plant", "Month", "Shipment: Quantity", "Shipment: Unit"],
-    fields=[
-        FieldSpec("Order ID", "str", nullable=False),
-        FieldSpec("Plant", "str", nullable=False),
-        FieldSpec("Month", "int", nullable=False, min_value=0, max_value=239),
-        FieldSpec("Shipment: Quantity", "float", nullable=False, min_value=0, max_value=100000),
-        FieldSpec("Shipment: Unit", "str", nullable=False),
-    ],
-    natural_key=["Order ID"],
-    unit_field="Shipment: Unit",
-)
-
-RETURNS_REGISTER = SourceContract(
-    source_name="returns_register",
-    is_excel=True,
-    expected_columns=["Return ID", "Plant", "Month", "Return: Volume", "Return: Unit"],
-    fields=[
-        FieldSpec("Return ID", "str", nullable=False),
-        FieldSpec("Plant", "str", nullable=False),
-        FieldSpec("Month", "int", nullable=False, min_value=0, max_value=239),
-        FieldSpec("Return: Volume", "float", nullable=False, min_value=0, max_value=50000),
-        FieldSpec("Return: Unit", "str", nullable=False),
-    ],
-    natural_key=["Return ID"],
-    unit_field="Return: Unit",
-)
-
-DOWNTIME_LOG = SourceContract(
-    source_name="downtime_log",
-    is_excel=True,
-    expected_columns=["Event ID", "Plant", "Month", "Downtime: Duration", "Downtime: Unit"],
-    fields=[
-        FieldSpec("Event ID", "str", nullable=False),
-        FieldSpec("Plant", "str", nullable=False),
-        FieldSpec("Month", "int", nullable=False, min_value=0, max_value=239),
-        FieldSpec("Downtime: Duration", "float", nullable=False, min_value=0, max_value=744),
-        FieldSpec("Downtime: Unit", "str", nullable=False),
-    ],
-    natural_key=["Event ID"],
-    unit_field="Downtime: Unit",
-)
-
-COMPLAINT_TRACKER = SourceContract(
-    source_name="complaint_tracker",
-    is_excel=True,
-    expected_columns=["Complaint ID", "Plant", "Month", "Complaint: Category", "Complaint: Severity"],
-    fields=[
-        FieldSpec("Complaint ID", "str", nullable=False),
-        FieldSpec("Plant", "str", nullable=False),
-        FieldSpec("Month", "int", nullable=False, min_value=0, max_value=239),
-        FieldSpec("Complaint: Category", "str", nullable=False),
-        FieldSpec("Complaint: Severity", "str", nullable=False),
-    ],
-    natural_key=["Complaint ID"],
-    unit_field=None,
-)
-
-ERP_ORDER_EXTRACT = SourceContract(
-    source_name="erp_order_extract",
-    is_excel=False,
-    expected_columns=["plant", "month", "return_volume_l_total"],
-    fields=[
-        FieldSpec("plant", "str", nullable=False),
-        FieldSpec("month", "int", nullable=False, min_value=0, max_value=239),
-        FieldSpec("return_volume_l_total", "float", nullable=False, min_value=0),
-    ],
-    natural_key=["plant", "month"],
-    expected_countries=[],
-)
-
-WMS_SHIPMENT_EXTRACT = SourceContract(
-    source_name="wms_shipment_extract",
-    is_excel=False,
-    expected_columns=["plant", "month", "shipped_kg_total"],
-    fields=[
-        FieldSpec("plant", "str", nullable=False),
-        FieldSpec("month", "int", nullable=False, min_value=0, max_value=239),
-        FieldSpec("shipped_kg_total", "float", nullable=False, min_value=0),
-    ],
-    natural_key=["plant", "month"],
-    expected_countries=[],
-)
-
-CONTRACTS = {
-    "shipment_log": SHIPMENT_LOG,
-    "returns_register": RETURNS_REGISTER,
-    "downtime_log": DOWNTIME_LOG,
-    "complaint_tracker": COMPLAINT_TRACKER,
-    "erp_order_extract": ERP_ORDER_EXTRACT,
-    "wms_shipment_extract": WMS_SHIPMENT_EXTRACT,
+_KNOWN_TOP_LEVEL_KEYS = {
+    "source_name",
+    "kind",
+    "owner",
+    "watermark_column",
+    "refresh_window_hours",
+    "late_arrival_window_hours",
+    "expected_countries",
+    "unit_field",
+    "natural_key",
+    "expected_columns",
+    "fields",
+    "record_length",
 }
+
+
+def _load_field(raw: dict) -> FieldSpec:
+    return FieldSpec(
+        name=raw["name"],
+        dtype=raw["dtype"],
+        nullable=bool(raw.get("nullable", False)),
+        min_value=raw.get("min_value"),
+        max_value=raw.get("max_value"),
+        start=raw.get("start"),
+        length=raw.get("length"),
+        pattern=raw.get("pattern"),
+        aliases=tuple(raw.get("aliases", [])),
+        required=bool(raw.get("required", True)),
+    )
+
+
+def load_contract(path: str) -> SourceContract:
+    with open(path, "r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f)
+
+    missing = {"source_name", "kind", "expected_columns", "fields", "natural_key"} - set(raw)
+    if missing:
+        raise ValueError(f"{path}: contract YAML missing required keys {sorted(missing)}")
+
+    fields = [_load_field(r) for r in raw["fields"]]
+    declared_field_names = {f.name for f in fields}
+    expected = set(raw["expected_columns"])
+    if not expected <= declared_field_names:
+        raise ValueError(
+            f"{path}: expected_columns names {sorted(expected - declared_field_names)} "
+            "have no matching entry under fields: (a YAML contract silently dropping a "
+            "field during the refactor is exactly the bug this check exists to catch)"
+        )
+
+    extra = {k: v for k, v in raw.items() if k not in _KNOWN_TOP_LEVEL_KEYS}
+
+    return SourceContract(
+        source_name=raw["source_name"],
+        kind=raw["kind"],
+        expected_columns=list(raw["expected_columns"]),
+        fields=fields,
+        natural_key=list(raw["natural_key"]),
+        owner=raw.get("owner", ""),
+        watermark_column=raw.get("watermark_column", ""),
+        refresh_window_hours=float(raw.get("refresh_window_hours", 24.0)),
+        late_arrival_window_hours=float(raw.get("late_arrival_window_hours", 24.0)),
+        expected_countries=list(raw.get("expected_countries", [])),
+        unit_field=raw.get("unit_field"),
+        record_length=raw.get("record_length"),
+        extra=extra,
+    )
+
+
+def _load_all_contracts(contracts_dir: str = CONTRACTS_DIR) -> dict:
+    contracts = {}
+    for path in sorted(glob.glob(os.path.join(contracts_dir, "*.yaml"))):
+        contract = load_contract(path)
+        contracts[contract.source_name] = contract
+    return contracts
+
+
+CONTRACTS = _load_all_contracts()
+
+# Convenience accessors used across the codebase (unchanged names from the
+# pre-YAML module so other modules importing a specific constant still work).
+SHIPMENT_LOG = CONTRACTS.get("shipment_log")
+RETURNS_REGISTER = CONTRACTS.get("returns_register")
+DOWNTIME_LOG = CONTRACTS.get("downtime_log")
+COMPLAINT_TRACKER = CONTRACTS.get("complaint_tracker")
+ERP_ORDER_EXTRACT = CONTRACTS.get("erp_order_extract")
+WMS_SHIPMENT_EXTRACT = CONTRACTS.get("wms_shipment_extract")
+VENDOR_RATE_CATALOG = CONTRACTS.get("vendor_rate_catalog")
+VENDOR_CLAIMS_EXTRACT = CONTRACTS.get("vendor_claims_extract")
+VENDOR_DIRECTORY_FEED = CONTRACTS.get("vendor_directory_feed")
 
 assert set(UNIT_CONVERSION.keys()) <= set(CONTRACTS.keys())

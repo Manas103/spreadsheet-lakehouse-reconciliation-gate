@@ -1,0 +1,21 @@
+source_name: downtime_log
+kind: excel
+owner: "Plant Operations (manual Excel)"
+watermark_column: Month
+refresh_window_hours: 720
+late_arrival_window_hours: 168
+expected_countries: [IT, NL, SG]
+unit_field: "Downtime: Unit"
+natural_key: ["Event ID"]
+expected_columns:
+  - "Event ID"
+  - "Plant"
+  - "Month"
+  - "Downtime: Duration"
+  - "Downtime: Unit"
+fields:
+  - {name: "Event ID", dtype: str, nullable: false}
+  - {name: "Plant", dtype: str, nullable: false}
+  - {name: "Month", dtype: int, nullable: false, min_value: 0, max_value: 239}
+  - {name: "Downtime: Duration", dtype: float, nullable: false, min_value: 0, max_value: 744}
+  - {name: "Downtime: Unit", dtype: str, nullable: false}

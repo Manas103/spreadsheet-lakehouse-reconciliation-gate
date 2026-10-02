@@ -1,0 +1,17 @@
+source_name: wms_shipment_extract
+kind: csv
+owner: "WMS (system of record extract)"
+watermark_column: month
+refresh_window_hours: 24
+late_arrival_window_hours: 24
+expected_countries: []
+unit_field: null
+natural_key: ["plant", "month"]
+expected_columns:
+  - "plant"
+  - "month"
+  - "shipped_kg_total"
+fields:
+  - {name: "plant", dtype: str, nullable: false}
+  - {name: "month", dtype: int, nullable: false, min_value: 0, max_value: 239}
+  - {name: "shipped_kg_total", dtype: float, nullable: false, min_value: 0}

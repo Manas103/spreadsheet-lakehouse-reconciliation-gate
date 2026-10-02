@@ -1,0 +1,35 @@
+# A fixed-width (column-positional, not delimited) vendor claims extract,
+# the shape a legacy mainframe-adjacent vendor system drops as a nightly
+# file. Landed either over a real local paramiko SFTP server (loopback,
+# dynamic port, reconcilegate/sftp_io.py) or, if paramiko is unavailable,
+# read directly from a local landing directory shaped exactly like an
+# SFTP drop (see README "Honest framing" for which path this run took).
+# record_length is the sum of every field's length and is itself part of
+# the contract: a record whose byte length does not equal it, or whose
+# sliced field content does not match that field's declared pattern, is
+# fixed_width_field_misaligned, this format's analog of excel_io.py's
+# merged_header_misaligned.
+source_name: vendor_claims_extract
+kind: fixed_width
+owner: "Vendor Claims (SFTP fixed-width drop)"
+watermark_column: cycle
+refresh_window_hours: 24
+late_arrival_window_hours: 48
+expected_countries: []
+unit_field: null
+natural_key: ["claim_ref"]
+record_length: 34
+expected_columns:
+  - "claim_ref"
+  - "vendor_code"
+  - "plant"
+  - "amount_cents"
+  - "status_code"
+  - "cycle"
+fields:
+  - {name: "claim_ref", dtype: str, nullable: false, start: 0, length: 10, pattern: "^CLM-\\d{6}$"}
+  - {name: "vendor_code", dtype: str, nullable: false, start: 10, length: 6, pattern: "^V\\d{5}$"}
+  - {name: "plant", dtype: str, nullable: false, start: 16, length: 2, pattern: "^[A-Z]{2}$"}
+  - {name: "amount_cents", dtype: int, nullable: false, start: 18, length: 10, min_value: 0, max_value: 99999999, pattern: "^\\d{10}$"}
+  - {name: "status_code", dtype: str, nullable: false, start: 28, length: 2, pattern: "^[A-Z]{2}$"}
+  - {name: "cycle", dtype: int, nullable: false, start: 30, length: 4, min_value: 0, max_value: 239, pattern: "^\\d{4}$"}

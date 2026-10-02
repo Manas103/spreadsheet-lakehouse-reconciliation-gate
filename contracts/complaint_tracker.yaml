@@ -1,0 +1,21 @@
+source_name: complaint_tracker
+kind: excel
+owner: "Quality (manual Excel)"
+watermark_column: Month
+refresh_window_hours: 720
+late_arrival_window_hours: 168
+expected_countries: [IT, NL, SG]
+unit_field: null
+natural_key: ["Complaint ID"]
+expected_columns:
+  - "Complaint ID"
+  - "Plant"
+  - "Month"
+  - "Complaint: Category"
+  - "Complaint: Severity"
+fields:
+  - {name: "Complaint ID", dtype: str, nullable: false}
+  - {name: "Plant", dtype: str, nullable: false}
+  - {name: "Month", dtype: int, nullable: false, min_value: 0, max_value: 239}
+  - {name: "Complaint: Category", dtype: str, nullable: false}
+  - {name: "Complaint: Severity", dtype: str, nullable: false}

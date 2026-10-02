@@ -1,7 +1,10 @@
-"""Runs 20 clean loads and 30 seeded-defect loads (one per DEFECT_COUNTS
-instance) through the real materialize -> read -> gate pipeline, records
-which checks caught which defect, and publishes/quarantines each load to
-PostgreSQL if it is reachable. Writes docs/benchmark_output.txt.
+"""Runs 20 clean loads and 40 seeded-defect loads (30 in the original
+8-type/6-source pool, 10 in the vendor pool: 2 new defect types native to
+the 3 new source formats, plus one more instance of an existing type
+targeted at a vendor source) through the real materialize -> read -> gate
+pipeline, records which checks caught which defect, and publishes/
+quarantines each load to PostgreSQL if it is reachable. Writes
+docs/benchmark_output.txt.
 """
 from __future__ import annotations
 
@@ -20,11 +23,18 @@ DOCS_DIR = os.path.join(ROOT, "docs")
 
 
 def _expand_defect_instances():
+    """Returns [(pool, defect_type, month)], 40 total, each month index
+    unique across the whole run for RNG independence (same convention the
+    original 30-instance benchmark used)."""
     instances = []
     month = 0
-    for defect_type, count in config.DEFECT_COUNTS.items():
+    for defect_type, count in config.DEFECT_COUNTS_ORIGINAL.items():
         for _ in range(count):
-            instances.append((defect_type, month))
+            instances.append(("original", defect_type, month))
+            month += 1
+    for defect_type, count in config.DEFECT_COUNTS_VENDOR.items():
+        for _ in range(count):
+            instances.append(("vendor", defect_type, month))
             month += 1
     return instances
 
@@ -48,7 +58,7 @@ def main():
     n_lakehouse_writes = 0
 
     log("")
-    log(f"=== {config.N_CLEAN_LOADS} clean loads ===")
+    log(f"=== {config.N_CLEAN_LOADS} clean loads across {len(config.ALL_SOURCES)} sources ===")
     clean_held = 0
     for month in range(config.N_CLEAN_LOADS):
         batch = datagen.generate_clean_batch(config.SEED, month)
@@ -75,17 +85,17 @@ def main():
     log(f"clean loads held: {clean_held} of {config.N_CLEAN_LOADS}")
 
     log("")
-    log(f"=== {config.N_SEEDED_DEFECTS} seeded-defect loads ===")
+    log(f"=== {config.N_SEEDED_DEFECTS} seeded-defect loads, {len(config.DEFECT_COUNTS)} defect types ===")
     instances = _expand_defect_instances()
     assert len(instances) == config.N_SEEDED_DEFECTS
     caught = 0
     per_type_caught = {t: 0 for t in config.DEFECT_COUNTS}
-    for defect_type, month in instances:
-        batch, defect_source, expected_check = datagen.generate_defect_batch(config.SEED, month, defect_type)
-        out_dir = os.path.join(DATA_DIR, f"defect_{defect_type}_{month:02d}")
+    for pool, defect_type, month in instances:
+        batch, defect_source, expected_check = datagen.generate_defect_batch(config.SEED, month, defect_type, pool=pool)
+        out_dir = os.path.join(DATA_DIR, f"defect_{pool}_{defect_type}_{month:02d}")
         paths = materialize.write_batch(batch, out_dir)
         sources = materialize.read_batch(paths)
-        result = run_gate(f"defect-{defect_type}-{month:02d}", sources)
+        result = run_gate(f"defect-{pool}-{defect_type}-{month:02d}", sources)
         was_caught = (not result.published) and any(
             c.check == defect_type for c in result.failing_checks
         )
@@ -93,7 +103,7 @@ def main():
             caught += 1
             per_type_caught[defect_type] += 1
         log(
-            f"load defect-{defect_type}-{month:02d} (expected {expected_check}): "
+            f"load defect-{pool}-{defect_type}-{month:02d} (expected {expected_check}): "
             f"{'CAUGHT' if was_caught else 'MISSED'}, published={result.published}, "
             f"failing_checks={result.failing_check_names}"
         )
@@ -116,7 +126,10 @@ def main():
         conn.close()
     spark.stop()
     log("")
-    log(f"lakehouse writes (published loads only): {n_lakehouse_writes} of {config.N_CLEAN_LOADS + config.N_SEEDED_DEFECTS} total loads")
+    log(
+        f"lakehouse writes (published loads, original 6 sources only, see README Limitations): "
+        f"{n_lakehouse_writes} of {config.N_CLEAN_LOADS + config.N_SEEDED_DEFECTS} total loads"
+    )
 
     os.makedirs(DOCS_DIR, exist_ok=True)
     with open(os.path.join(DOCS_DIR, "benchmark_output.txt"), "w") as f:

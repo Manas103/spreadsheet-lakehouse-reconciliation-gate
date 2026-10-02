@@ -1,0 +1,17 @@
+source_name: erp_order_extract
+kind: csv
+owner: "ERP (system of record extract)"
+watermark_column: month
+refresh_window_hours: 24
+late_arrival_window_hours: 24
+expected_countries: []
+unit_field: null
+natural_key: ["plant", "month"]
+expected_columns:
+  - "plant"
+  - "month"
+  - "return_volume_l_total"
+fields:
+  - {name: "plant", dtype: str, nullable: false}
+  - {name: "month", dtype: int, nullable: false, min_value: 0, max_value: 239}
+  - {name: "return_volume_l_total", dtype: float, nullable: false, min_value: 0}

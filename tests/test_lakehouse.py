@@ -5,11 +5,16 @@ from reconcilegate.lakehouse import publish_load
 
 
 def test_publish_load_writes_all_six_sources(tmp_path, spark):
+    # publish_load's scope is still the original 6 sources (4 excel + 2
+    # csv); the 3 new vendor sources are contract-checked, watermarked
+    # (reconcilegate/ingest.py) and defect-covered (reconcilegate/datagen.py)
+    # but are not published into the Spark/Parquet lakehouse in this
+    # extension, a disclosed limitation (see README).
     batch = datagen.generate_clean_batch(config.SEED, 0)
     lakehouse_dir = str(tmp_path / "lakehouse")
     publish_load(spark, batch, 0, lakehouse_dir)
 
-    for source in config.ALL_SOURCES:
+    for source in config.EXCEL_SOURCES + config.SOR_SOURCES:
         dst = os.path.join(lakehouse_dir, source)
         assert os.path.isdir(dst)
         df = spark.read.parquet(dst)

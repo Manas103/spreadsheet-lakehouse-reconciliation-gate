@@ -23,10 +23,20 @@ def test_ten_clean_loads_all_publish(tmp_path, month):
     assert result.published, result.failing_check_names
 
 
-@pytest.mark.parametrize("defect_type", list(config.DEFECT_COUNTS.keys()))
-def test_each_defect_type_is_caught_and_named(tmp_path, defect_type):
-    batch, source, expected_check = datagen.generate_defect_batch(config.SEED, 77, defect_type)
+@pytest.mark.parametrize("defect_type", list(datagen.DEFECT_INJECTORS.keys()))
+def test_each_original_defect_type_is_caught_and_named(tmp_path, defect_type):
+    batch, source, expected_check = datagen.generate_defect_batch(config.SEED, 77, defect_type, pool="original")
     result = _run(tmp_path, batch, f"defect-{defect_type}")
+    assert not result.published
+    assert any(c.check == defect_type for c in result.failing_checks), (
+        f"expected a {defect_type} failing check, got {result.failing_check_names}"
+    )
+
+
+@pytest.mark.parametrize("defect_type", list(datagen.VENDOR_DEFECT_INJECTORS.keys()))
+def test_each_vendor_defect_type_is_caught_and_named(tmp_path, defect_type):
+    batch, source, expected_check = datagen.generate_defect_batch(config.SEED, 177, defect_type, pool="vendor")
+    result = _run(tmp_path, batch, f"vendor-defect-{defect_type}")
     assert not result.published
     assert any(c.check == defect_type for c in result.failing_checks), (
         f"expected a {defect_type} failing check, got {result.failing_check_names}"

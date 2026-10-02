@@ -1,0 +1,21 @@
+source_name: returns_register
+kind: excel
+owner: "Quality / Returns (manual Excel)"
+watermark_column: Month
+refresh_window_hours: 720
+late_arrival_window_hours: 168
+expected_countries: [IT, NL, SG]
+unit_field: "Return: Unit"
+natural_key: ["Return ID"]
+expected_columns:
+  - "Return ID"
+  - "Plant"
+  - "Month"
+  - "Return: Volume"
+  - "Return: Unit"
+fields:
+  - {name: "Return ID", dtype: str, nullable: false}
+  - {name: "Plant", dtype: str, nullable: false}
+  - {name: "Month", dtype: int, nullable: false, min_value: 0, max_value: 239}
+  - {name: "Return: Volume", dtype: float, nullable: false, min_value: 0, max_value: 50000}
+  - {name: "Return: Unit", dtype: str, nullable: false}

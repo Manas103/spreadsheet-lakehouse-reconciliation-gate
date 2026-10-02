@@ -35,8 +35,15 @@ def test_clean_batch_shipment_totals_reconcile_exactly_in_canonical_units():
         assert abs(canonical_total - wms[country]) < 0.01
 
 
-def test_all_eight_defect_types_generate_without_error():
-    for defect_type in config.DEFECT_COUNTS:
-        batch, source, check = datagen.generate_defect_batch(config.SEED, 50, defect_type)
+def test_all_original_eight_defect_types_generate_without_error():
+    for defect_type in datagen.DEFECT_INJECTORS:
+        batch, source, check = datagen.generate_defect_batch(config.SEED, 50, defect_type, pool="original")
+        assert check.startswith(defect_type)
+        assert source in config.ALL_SOURCES
+
+
+def test_all_vendor_defect_types_generate_without_error():
+    for defect_type in datagen.VENDOR_DEFECT_INJECTORS:
+        batch, source, check = datagen.generate_defect_batch(config.SEED, 150, defect_type, pool="vendor")
         assert check.startswith(defect_type)
         assert source in config.ALL_SOURCES
