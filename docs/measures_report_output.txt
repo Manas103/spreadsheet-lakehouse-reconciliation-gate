@@ -1,0 +1,27 @@
+Rendered 4 reports from 9 measure definitions (month 10, clean load):
+  shipment_performance:
+    shipped_kg_total: {'IT': 14139.017015272, 'NL': 11249.454176944, 'SG': 10032.137403744}
+    shipments_this_period: {'IT': 15, 'NL': 15, 'SG': 15}
+  returns_and_quality:
+    returns_volume_l_total: {'IT': 364.883216, 'NL': 318.060462, 'SG': 391.08978499999995}
+    returns_this_period: {'IT': 15, 'NL': 15, 'SG': 15}
+    shipments_this_period: {'IT': 15, 'NL': 15, 'SG': 15}
+    return_rate_pct: {'IT': 100.0, 'NL': 100.0, 'SG': 100.0}
+  downtime_and_reliability:
+    downtime_hours_total: {'IT': 198.02239999999998, 'NL': 191.95650000000003, 'SG': 192.85014999999996}
+    downtime_events_this_period: {'IT': 15, 'NL': 15, 'SG': 15}
+  complaint_summary:
+    complaints_this_period: {'IT': 15, 'NL': 15, 'SG': 15}
+
+Shipments This Period disagreement check, 3 deliberate duplicate-Order-ID scenarios:
+  month 200: 1 disagreement(s)
+    plant=NL shipment_performance=16 returns_and_quality=15
+    definition_difference: Shipment Performance counts shipment_log rows; Returns & Quality counts distinct Order IDs; 1 duplicated Order ID(s) in this plant's sheet.
+  month 201: 1 disagreement(s)
+    plant=IT shipment_performance=16 returns_and_quality=15
+    definition_difference: Shipment Performance counts shipment_log rows; Returns & Quality counts distinct Order IDs; 1 duplicated Order ID(s) in this plant's sheet.
+  month 202: 1 disagreement(s)
+    plant=SG shipment_performance=16 returns_and_quality=15
+    definition_difference: Shipment Performance counts shipment_log rows; Returns & Quality counts distinct Order IDs; 1 duplicated Order ID(s) in this plant's sheet.
+TOTAL DISAGREEMENTS FOUND: 3 of 3 scenarios
+False-positive check across 20 independent clean loads (months 0-19): 0 disagreement(s)

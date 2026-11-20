@@ -6,10 +6,14 @@ headers, 2 CSV system-of-record extracts, a cursor-paginated REST API,
 an SFTP fixed-width drop and a drifting-header CSV, every one validated
 against a real per-source YAML contract, published into a small
 PySpark-built Parquet lakehouse, and audited into one governed local
-PostgreSQL schema. Every number below was measured on this machine by
-running `scripts/run_gate_benchmark.py`, not targeted in advance: 40 of
-40 seeded defects (10 types now, up from 8) were caught on the first
-complete run after this extension, with 0 of 20 clean loads held.
+PostgreSQL schema, with the four legacy Excel reports rendered from 9
+tested measure definitions and one comparison that finds exactly where two
+of those reports disagree. Every number below was measured on this
+machine by running `scripts/run_gate_benchmark.py` and
+`scripts/run_measures_report.py`, not targeted in advance: 40 of 40 seeded
+defects (10 types) are caught with 0 of 20 clean loads held, and the
+measures comparison finds a disagreement in exactly the 3 scenarios built
+to have one and none of the clean loads checked.
 
 ## Why this exists
 
@@ -66,11 +70,29 @@ load that fails any check quarantined whole, never partially published.
   no-op test, was actually published, quarantined, or watermarked into
   it live. If PostgreSQL is unreachable, every module catches the
   connection error and reports "skipped" rather than failing the run.
+- **The measures layer reads parsed sheets directly, upstream of the
+  gate.** `reconcilegate/measures.py` renders the four legacy reports from
+  the same per-country `DataFrame`s `datagen.py` builds, before any
+  contract check or publish decision; this is deliberate, not a shortcut:
+  the whole point of a measures layer is to catch a disagreement before it
+  reaches a report, and the migration-era problem this repo is a small
+  version of is specifically ad hoc reports built straight off the raw
+  monthly files.
+- **The 3 disagreement scenarios are a separate, disclosed fixture, not
+  the main benchmark's seeded defects.** `reconcilegate/measures_fixtures.py`
+  builds 3 clean loads at months 200-202 (inside the contract's declared
+  0-239 range, outside the roughly 0-39 range the real 20-clean/40-defect
+  benchmark uses) and duplicates one shipment_log Order ID in each. A
+  duplicated key is already one of the gate's own seeded defect types
+  (`duplicate_natural_key`); a load with one is always quarantined, so it
+  never reaches a report in the governed pipeline. This fixture exists to
+  measure what the two report definitions do on exactly that input, not to
+  claim the gate would ever let it through.
 - **Machine and toolchain:** AMD Ryzen 7 7800X3D, 8 physical / 16 logical
   cores, Windows 11 Home, WSL2 Ubuntu 22.04 (capped to 12 vCPUs).
   Python 3.10.12 in `.venv-wsl`, PySpark 3.5.6 `local[6]`, OpenJDK 17,
-  openpyxl 3.1.5, psycopg2-binary 2.9.10, PostgreSQL 14, **pyyaml 6.0.3
-  and paramiko 5.0.0 added for this extension**.
+  openpyxl 3.1.5, psycopg2-binary 2.9.10, PostgreSQL 14, pyyaml 6.0.3,
+  paramiko 5.0.0.
 
 ## Architecture
 
@@ -100,11 +122,15 @@ reconcilegate/
   db.py                         PostgreSQL publish/quarantine/watermark audit schema
   watermark.py                  per-source last-seen watermark, in the same governed schema
   ingest.py                     idempotent ingest: rerun with no new data is a no-op, all 9 sources
+  measures.py                   the 9 tested measure definitions, 4 reports, and the
+                                 "Shipments This Period" disagreement comparison
+  measures_fixtures.py          3 deliberate duplicate-Order-ID scenarios for that comparison
 scripts/
   run_gate_benchmark.py         20 clean + 40 defect loads, end to end
   generate_source_register.py   generated data dictionary from the 9 contracts
+  run_measures_report.py        renders the 4 reports, runs the disagreement check
 tests/
-  (18 modules, 73 tests total, see Validation)
+  (19 modules, 87 tests total, see Validation)
 ```
 
 ### The YAML contract refactor (`contracts.py`)
@@ -181,6 +207,23 @@ governed PostgreSQL schema as `published_loads`), and a rerun of a cycle
 already on file inserts zero new rows, a true no-op, not an
 overwrite-and-call-it-idempotent.
 
+### Two reports, one shared-sounding figure, two definitions (`measures.py`)
+
+"Shipments This Period" appears on both the Shipment Performance report
+(measure 2: a count per row in `shipment_log`) and the Returns & Quality
+report (measure 5: a count per distinct `Order ID`, since it is the
+denominator that report's return rate actually needs). The two formulas
+are each correct for what their own report is doing; they only disagree
+when a sheet has a duplicated Order ID, which is exactly the
+`duplicate_natural_key` defect the gate already knows how to catch
+upstream. `find_shipments_this_period_disagreements` does not special-case
+"this is the known bug"; it just runs both definitions and diffs them,
+which is what makes it find zero disagreements across 20 genuinely
+independent clean loads
+(`test_disagreement_does_not_fire_across_twenty_independent_clean_loads`,
+the measures report's false-positive check) and exactly one on each of the
+3 scenarios built to have one.
+
 ## Validation
 
 - **Contract unit tests** (`test_validate.py`): each of the 8 original
@@ -206,11 +249,18 @@ overwrite-and-call-it-idempotent.
   parametrized across both the original and vendor injector pools).
 - **Live PostgreSQL and PySpark**, not mocked (`test_db.py`,
   `test_lakehouse.py`).
+- **Each of the 9 measure definitions, hand-built and isolated from the
+  generator** (`test_measures.py`): canonical-unit conversion, row counts,
+  distinct-key counts, and the return-rate calculation's denominator.
+- **The disagreement comparison**, both on a hand-built duplicate-key case
+  and on real data: 0 false positives across 20 independent clean loads,
+  exactly one disagreement on each of the 3 deliberate scenarios.
 
 ```
 $ .venv-wsl/bin/python -m pytest tests -q
-.........................................................................
-73 passed in 22.15s
+........................................................................
+...............
+87 passed in 30.15s
 ```
 
 Raw output: `docs/test_output.txt`.
@@ -252,6 +302,18 @@ recording anyway:
    original 6 sources; this extension does not get to claim a struggle
    on the new 10 defect types that it did not actually have.
 
+**New to the measures extension:**
+
+5. The first version of the false-positive check only ran one clean load
+   (month 11), which would have let a comparison with a real bug (say, an
+   off-by-one in the distinct-key count) pass undetected if that one
+   month happened not to exercise it. Widening it to all 20 of the main
+   benchmark's independent clean loads
+   (`test_disagreement_does_not_fire_across_twenty_independent_clean_loads`)
+   did not find a bug, but a false-positive claim measured on one sample is
+   not the same claim as one measured on 20, and only the wider one belongs
+   in Measured results.
+
 ## Measured results
 
 Machine: AMD Ryzen 7 7800X3D, 8 physical / 16 logical cores, Windows 11,
@@ -277,6 +339,18 @@ break along the way).
 | 40 of 40 seeded defects quarantined with the failing check named | **40 of 40**, 10 defect types, every one named | yes |
 | 0 of 20 clean loads held | **0 of 20** | yes |
 | Register generated from the contracts | `scripts/generate_source_register.py` emits `docs/source_register.md` from the live `CONTRACTS` dict; `test_register.py` checks every listed column traces to a real field | yes |
+| The four reports rendered from 9 tested measure definitions | 4 reports (`shipment_performance`, `returns_and_quality`, `downtime_and_reliability`, `complaint_summary`), **9** distinct measure functions across them | yes |
+| 3 places two of those reports disagreed, each traced to a definition difference | **3 of 3** deliberate scenarios produced exactly one disagreement each, every one naming the two differing formulas | yes |
+
+Measures report, machine and command as above,
+`python scripts/run_measures_report.py`:
+
+| Claim | Measured | Meets claim |
+|---|---|---|
+| 0 false positives on genuinely clean loads | **0 of 20** independent clean loads flagged a disagreement | yes |
+| Disagreements found on the 3 deliberate duplicate-key scenarios | **3 of 3**, one per scenario (months 200, 201, 202), each naming the plant and the exact row-count-vs-distinct-count difference | yes |
+
+Raw output: `docs/measures_report_output.txt`.
 
 By defect type (40 total):
 
@@ -314,6 +388,7 @@ export PYSPARK_PYTHON="$(pwd)/.venv-wsl/bin/python3"
 .venv-wsl/bin/python -m pytest tests -q               # docs/test_output.txt
 .venv-wsl/bin/python scripts/run_gate_benchmark.py     # docs/benchmark_output.txt
 .venv-wsl/bin/python scripts/generate_source_register.py  # docs/source_register.md
+.venv-wsl/bin/python scripts/run_measures_report.py    # docs/measures_report_output.txt
 
 # REST API / SFTP tests start and stop their own server instances on
 # OS-assigned ports, in-process; nothing to start or stop manually.
@@ -367,3 +442,17 @@ contract regardless of transport" actually needs to prove.
 - `reconciliation_mismatch` defects remain a fixed 25% perturbation,
   well past the 1% tolerance; the gate's behavior exactly at the
   tolerance boundary is not separately measured.
+- `measures.py` reads directly off `datagen.py`'s parsed sheets, upstream
+  of the gate; it does not run against the governed Parquet/PostgreSQL
+  output `lakehouse.py`/`db.py` produce, so it cannot yet replace a report
+  built on top of the published lakehouse, only one built on the raw
+  files.
+- Only one disagreement (`shipments_this_period`, row count vs. distinct
+  key) is implemented end to end with a comparison function; the other 8
+  measures are each tested individually but have no cross-report
+  consistency check of their own, since nothing in this design calls for
+  one.
+- The 3 disagreement scenarios are a hand-built fixture at a fixed RNG
+  seed, not a sweep over every way two reports' definitions could diverge
+  (e.g. two duplicates in one sheet, duplicates in two different plants in
+  the same load).
